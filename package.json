@@ -2,6 +2,7 @@
   "name": "rs-backup",
   "version": "1.0.0",
   "description": "Backup and restore data from/to a remoteStorage account",
+  "keywords": ["remotestorage", "rs"],
   "bin": {
     "rs-backup": "./backup.js",
     "rs-restore": "./restore.js"
