@@ -2,30 +2,31 @@
 
 'use strict';
 
-const fs       = require('fs');
-const path     = require('path');
-const pkg      = require(path.join(__dirname, 'package.json'));
-const program  = require('commander');
-const fetch    = require('node-fetch');
-const mkdirp   = require('mkdirp');
-const rimraf   = require('rimraf');
-const prettyJs = require('pretty-js');
+const fs        = require('fs');
+const path      = require('path');
+const pkg       = require(path.join(__dirname, 'package.json'));
+const program   = require('commander');
+const fetch     = require('node-fetch');
+const mkdirp    = require('mkdirp');
+const rimraf    = require('rimraf');
+const prettyJs  = require('pretty-js');
+const discovery = require('./discovery.js');
 
 program
   .version(pkg.version)
-  // .option('--user-address <user address>', 'user address')
+  .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-o, --backup-dir <url>', 'backup directory path')
-  .option('-i, --base-url <url>', 'storage base URL of user')
   .option('--token <token>', 'valid bearer token')
   .option('--category <category>', 'category (base directory) to back up')
   .parse(process.argv);
 
-const backupDir = program.backupDir;
-const storageBaseUrl = program.baseUrl; // TODO Discovery
-const token = program.token;
-const category = program.category || '';
+const userAddress  = program.userAddress;
+const backupDir    = program.backupDir;
+const token        = program.token;
+const category     = program.category || '';
+var storageBaseUrl = null;
 
-if (!(token && storageBaseUrl && backupDir)) {
+if (!(token && userAddress && backupDir)) {
   program.help();
   process.exit(1);
 }
@@ -78,6 +79,23 @@ var handleError = function(error) {
   // process.exit(1);
 };
 
-rimraf.sync(backupDir); // TODO incremental update
-mkdirp.sync(backupDir);
-fetchDirectoryContents(initialDir);
+var executeBackup = function() {
+  rimraf.sync(backupDir); // TODO incremental update
+  mkdirp.sync(backupDir);
+  fetchDirectoryContents(initialDir);
+};
+
+// Start the show
+
+discovery.lookup(userAddress)
+  .then(storageInfo => {
+    let href = storageInfo.href;
+    if (href[href.length-1] !== '/') { href = href+'/'; }
+    storageBaseUrl = href;
+    executeBackup();
+  })
+  .catch(error => {
+    console.log('Lookup of '+userAddress+' failed:');
+    console.log(error);
+    process.exit(1);
+  });

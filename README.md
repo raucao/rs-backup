@@ -15,7 +15,11 @@ older versions and tell me if it works.)
     rs-backup --help
     rs-restore --help
 
-For now you'll need to provide the base URL of your storage account(s). I'll
-add discovery via WebFinger soon, though. If you don't know what any of that
-means, please check back here in a few weeks, so you don't have to dig into RS
-technicalities. Thanks!
+You'll need a valid token for either the whole storage or the category you're
+backing up. You can either get one from your server or e.g. look it up in the
+localStorage of a connected app (try [rs-browser][1] for a root token).
+
+If you don't know what any of that means, please check back here in a few
+weeks, so you don't have to dig into RS technicalities. Thanks!
+
+[1] https://remotestorage-browser.5apps.com

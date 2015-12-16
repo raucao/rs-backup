@@ -1,5 +1,7 @@
 {
   "predef": [
+    "require",
+    "module"
   ],
   "boss": true,
   "curly": true,

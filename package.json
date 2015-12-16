@@ -2,7 +2,10 @@
   "name": "rs-backup",
   "version": "1.0.0",
   "description": "Backup and restore data from/to a remoteStorage account",
-  "keywords": ["remotestorage", "rs"],
+  "keywords": [
+    "remotestorage",
+    "rs"
+  ],
   "bin": {
     "rs-backup": "./backup.js",
     "rs-restore": "./restore.js"
@@ -19,7 +22,8 @@
     "mkdirp": "^0.5.1",
     "node-fetch": "^1.3.3",
     "pretty-js": "^0.1.8",
-    "rimraf": "^2.4.4"
+    "rimraf": "^2.4.4",
+    "webfinger.js": "^2.2.1"
   },
   "engines": {
     "node": ">=5.0.0"
