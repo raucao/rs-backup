@@ -7,24 +7,27 @@ const path      = require('path');
 const pkg       = require(path.join(__dirname, 'package.json'));
 const program   = require('commander');
 const fetch     = require('node-fetch');
+const prompt    = require('prompt');
+const opener    = require("opener");
 const discovery = require('./discovery.js');
 
 program
   .version(pkg.version)
-  .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-i, --backup-dir <url>', 'backup directory path')
-  .option('--token <token>', 'valid bearer token')
-  .option('--category <category>', 'category (base directory) to restore')
+  .option('-c, --category <category>', 'category (base directory) to back up')
+  .option('-u, --user-address <user address>', 'user address (user@host)')
+  .option('-t, --token <token>', 'valid bearer token')
   .parse(process.argv);
 
-const userAddress  = program.userAddress;
 const backupDir    = program.backupDir;
-const token        = program.token;
 const category     = program.category || '';
+var userAddress    = program.userAddress;
+var token          = program.token;
 var storageBaseUrl = null;
 
-if (!(token && userAddress && backupDir)) {
-  program.help();
+if (!(backupDir)) {
+  // TODO aks or use default
+  console.log('Please provide a backup directory path via the --backup-dir option');
   process.exit(1);
 }
 
@@ -73,21 +76,75 @@ var handleError = function(error) {
   console.log(error);
 };
 
-var executeRestore = function() {
-  putDirectoryContents(initialDir);
-};
-
-// Start the show
-
-discovery.lookup(userAddress)
-  .then(storageInfo => {
+var lookupStorageInfo = function() {
+  return discovery.lookup(userAddress).then(storageInfo => {
     let href = storageInfo.href;
     if (href[href.length-1] !== '/') { href = href+'/'; }
     storageBaseUrl = href;
-    executeRestore();
-  })
-  .catch(error => {
+    return storageInfo;
+  }).catch(error => {
     console.log('Lookup of '+userAddress+' failed:');
     console.log(error);
     process.exit(1);
   });
+};
+
+var executeRestore = function() {
+  console.log('\nStarting restore...\n');
+  putDirectoryContents(initialDir);
+};
+
+var schemas = {
+  userAddress: {
+    name: 'userAddress',
+    description: 'User address (user@host):',
+    type: 'string',
+    pattern: /^.+@.+$/,
+    message: 'Please provide a valid user address. Example: tony@5apps.com',
+    required: true,
+  },
+  token: {
+    name: 'token',
+    description: 'Authorization token:',
+    type: 'string',
+    required: true,
+  }
+};
+
+var cleanAuthURL = function(authURL) {
+  // Come on, php-remote-storage. :)
+  if (authURL.indexOf('?') !== -1) {
+    authURL = authURL.substr(0, authURL.indexOf('?'));
+  }
+  return authURL;
+};
+
+// Start the show
+
+if (token && userAddress) {
+  lookupStorageInfo().then(executeRestore);
+} else {
+  console.log('No user address and auth token set via options. Please type your user address and hit enter in order to open a browser window and connect your remote storage.'.cyan);
+  prompt.message = '';
+  prompt.delimiter = '';
+  prompt.start();
+
+  prompt.get(schemas.userAddress, (err, result) => {
+    userAddress = result.userAddress;
+
+    lookupStorageInfo().then(storageInfo => {
+      let scope   = category.length > 0 ? category+':rw' : '*:rw';
+      let authURL = cleanAuthURL(storageInfo.authURL);
+      let openURL = authURL+'?client_id=rs-backup.5apps.com'+
+                            '&redirect_uri=http://rs-backup.5apps.com/'+
+                            '&response_type=token'+
+                            '&scope='+scope;
+      opener(openURL);
+
+      prompt.get(schemas.token, (err, result) => {
+        token = result.token;
+        lookupStorageInfo().then(executeRestore);
+      });
+    });
+  });
+}

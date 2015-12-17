@@ -148,7 +148,6 @@ if (token && userAddress) {
                             '&redirect_uri=http://rs-backup.5apps.com/'+
                             '&response_type=token'+
                             '&scope='+scope;
-
       opener(openURL);
 
       prompt.get(schemas.token, (err, result) => {
