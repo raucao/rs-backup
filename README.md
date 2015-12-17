@@ -1,6 +1,6 @@
 # remoteStorage Backup/Restore
 
-This program allows you to backup your data from a remoteStorage account to a
+This program allows you to backup your data from a [remoteStorage][1] account to a
 local hard drive and restore it to the same or another account or server.
 
 ## Install
@@ -18,4 +18,4 @@ older versions and tell me if it works.)
 You can optionally pass user address and token via arguments, for example when
 setting up a regular backup job. See `--help` for more.
 
-[1] https://remotestorage-browser.5apps.com
+[1]: https://remotestorage.io
