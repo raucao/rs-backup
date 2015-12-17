@@ -12,14 +12,10 @@ older versions and tell me if it works.)
 
 ## Usage
 
-    rs-backup --help
-    rs-restore --help
+    rs-backup -o path_to_backup_dir
+    rs-restore -i path_to_backup_dir
 
-You'll need a valid token for either the whole storage or the category you're
-backing up. You can either get one from your server or e.g. look it up in the
-localStorage of a connected app (try [rs-browser][1] for a root token).
-
-If you don't know what any of that means, please check back here in a few
-weeks, so you don't have to dig into RS technicalities. Thanks!
+You can optionally pass user address and token via arguments, for example when
+setting up a regular backup job. See `--help` for more.
 
 [1] https://remotestorage-browser.5apps.com
