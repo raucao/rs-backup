@@ -1,6 +1,6 @@
 {
   "name": "rs-backup",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Backup and restore data from/to a remoteStorage account",
   "keywords": [
     "remotestorage",
