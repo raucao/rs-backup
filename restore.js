@@ -10,6 +10,7 @@ const fetch     = require('node-fetch');
 const prompt    = require('prompt');
 const opener    = require("opener");
 const discovery = require('./discovery.js');
+const addQueryParamsToURL = require('./add-query-params-to-url');
 
 program
   .version(pkg.version)
@@ -21,6 +22,7 @@ program
 
 const backupDir    = program.backupDir;
 const category     = program.category || '';
+const authScope    = category.length > 0 ? category+':rw' : '*:rw';
 var userAddress    = program.userAddress;
 var token          = program.token;
 var storageBaseUrl = null;
@@ -111,14 +113,6 @@ var schemas = {
   }
 };
 
-var cleanAuthURL = function(authURL) {
-  // Come on, php-remote-storage. :)
-  if (authURL.indexOf('?') !== -1) {
-    authURL = authURL.substr(0, authURL.indexOf('?'));
-  }
-  return authURL;
-};
-
 // Start the show
 
 if (token && userAddress) {
@@ -133,13 +127,14 @@ if (token && userAddress) {
     userAddress = result.userAddress;
 
     lookupStorageInfo().then(storageInfo => {
-      let scope   = category.length > 0 ? category+':rw' : '*:rw';
-      let authURL = cleanAuthURL(storageInfo.authURL);
-      let openURL = authURL+'?client_id=rs-backup.5apps.com'+
-                            '&redirect_uri=http://rs-backup.5apps.com/'+
-                            '&response_type=token'+
-                            '&scope='+scope;
-      opener(openURL);
+      let authURL = addQueryParamsToURL(storageInfo.authURL, {
+        client_id: 'rs-backup.5apps.com',
+        redirect_uri: 'https://rs-backup.5apps.com/',
+        response_type: 'token',
+        scope: authScope
+      });
+
+      opener(authURL);
 
       prompt.get(schemas.token, (err, result) => {
         token = result.token;
