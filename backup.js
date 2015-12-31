@@ -147,7 +147,7 @@ if (token && userAddress) {
 
       prompt.get(schemas.token, (err, result) => {
         token = result.token;
-        lookupStorageInfo().then(executeBackup);
+        executeBackup();
       });
     });
   });
