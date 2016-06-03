@@ -14,7 +14,7 @@ const addQueryParamsToURL = require('./add-query-params-to-url');
 
 program
   .version(pkg.version)
-  .option('-i, --backup-dir <url>', 'backup directory path')
+  .option('-i, --backup-dir <path>', 'backup directory path')
   .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-t, --token <token>', 'valid bearer token')
