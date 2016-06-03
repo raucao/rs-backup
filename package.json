@@ -16,6 +16,13 @@
   "authors": [
     "Sebastian Kippe <sebastian@kip.pe>"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skddc/rs-backup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/skddc/rs-backup/issues"
+  },
   "license": "MIT",
   "dependencies": {
     "commander": "^2.9.0",
