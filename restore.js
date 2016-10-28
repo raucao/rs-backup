@@ -2,14 +2,15 @@
 
 'use strict';
 
-const fs        = require('graceful-fs');
-const path      = require('path');
-const pkg       = require(path.join(__dirname, 'package.json'));
-const program   = require('commander');
-const fetch     = require('node-fetch');
-const prompt    = require('prompt');
-const opener    = require("opener");
-const discovery = require('./discovery.js');
+const fs          = require('graceful-fs');
+const path        = require('path');
+const pkg         = require(path.join(__dirname, 'package.json'));
+const program     = require('commander');
+const fetch       = require('node-fetch');
+const prompt      = require('prompt');
+const opener      = require("opener");
+const discovery   = require('./discovery.js');
+const rateLimited = require('./rate-limited');
 const addQueryParamsToURL = require('./add-query-params-to-url');
 
 program
@@ -18,17 +19,19 @@ program
   .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-t, --token <token>', 'valid bearer token')
+  .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)')
   .parse(process.argv);
 
 const backupDir    = program.backupDir;
 const category     = program.category || '';
 const authScope    = category.length > 0 ? category+':rw' : '*:rw';
+const rateLimit    = program.rateLimit || 40;
 var userAddress    = program.userAddress;
 var token          = program.token;
 var storageBaseUrl = null;
 
 if (!(backupDir)) {
-  // TODO aks or use default
+  // TODO ask or use default
   console.log('Please provide a backup directory path via the --backup-dir option');
   process.exit(1);
 }
@@ -61,6 +64,8 @@ var putDocument = function(path, meta) {
     }, error => handleError(error));
 };
 
+let putDocumentRateLimited = rateLimited(putDocument, rateLimit);
+
 var putDirectoryContents = function(dir) {
   let listing = JSON.parse(fs.readFileSync(backupDir+'/'+dir+'000_folder-description.json'));
 
@@ -69,7 +74,7 @@ var putDirectoryContents = function(dir) {
       putDirectoryContents(dir+key);
     } else {
       let meta = listing.items[key];
-      putDocument(dir+key, meta);
+      putDocumentRateLimited(dir+key, meta);
     }
   });
 };

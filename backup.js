@@ -2,20 +2,18 @@
 
 'use strict';
 
-const fs        = require('graceful-fs');
-const path      = require('path');
-const pkg       = require(path.join(__dirname, 'package.json'));
-const program   = require('commander');
-const fetch     = require('node-fetch');
-const mkdirp    = require('mkdirp');
-const rimraf    = require('rimraf');
-const prettyJs  = require('pretty-js');
-const prompt    = require('prompt');
-const opener    = require("opener");
-const _delay    = require("lodash.delay");
-const _bind     = require("lodash.bind");
-const _map      = require("lodash.map");
-const discovery = require('./discovery');
+const fs          = require('graceful-fs');
+const path        = require('path');
+const pkg         = require(path.join(__dirname, 'package.json'));
+const program     = require('commander');
+const fetch       = require('node-fetch');
+const mkdirp      = require('mkdirp');
+const rimraf      = require('rimraf');
+const prettyJs    = require('pretty-js');
+const prompt      = require('prompt');
+const opener      = require("opener");
+const discovery   = require('./discovery');
+const rateLimited = require('./rate-limited');
 const addQueryParamsToURL = require('./add-query-params-to-url');
 
 program
@@ -24,46 +22,22 @@ program
   .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-t, --token <token>', 'valid bearer token')
-  .option('-r, --rate-limit <time>', 'time interval for network requests (in ms)')
+  .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 20)')
   .parse(process.argv);
 
 const backupDir    = program.backupDir;
 const category     = program.category || '';
 const authScope    = category.length > 0 ? category+':rw' : '*:rw';
-const rateLimit    = program.rateLimit || 0;
+const rateLimit    = program.rateLimit || 20;
 var userAddress    = program.userAddress;
 var token          = program.token;
 var storageBaseUrl = null;
 
 if (!(backupDir)) {
-  // TODO aks or use default
+  // TODO ask or use default
   console.log('Please provide a backup directory path via the --backup-dir option');
   process.exit(1);
 }
-
-let rateLimited = function(func, rate) {
-  let queue = [];
-  let timeOutRef = false;
-  let currentlyEmptyingQueue = false;
-
-  let emptyQueue = function() {
-    if (queue.length) {
-      currentlyEmptyingQueue = true;
-      _delay(function() {
-        queue.shift().call();
-        emptyQueue();
-      }, rate);
-    } else {
-      currentlyEmptyingQueue = false;
-    }
-  };
-
-  return function() {
-    let args = _map(arguments, function(e) { return e; }); // get arguments into an array
-    queue.push( _bind.apply(this, [func, this].concat(args)) ); // call apply so that we can pass in arguments as parameters as opposed to an array
-    if (!currentlyEmptyingQueue) { emptyQueue(); }
-  };
-};
 
 let isDirectory = function(str) {
   return str[str.length-1] === '/';
