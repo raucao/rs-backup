@@ -12,6 +12,7 @@ const rimraf      = require('rimraf');
 const prettyJs    = require('pretty-js');
 const prompt      = require('prompt');
 const opener      = require("opener");
+const colors      = require("colors");
 const discovery   = require('./discovery');
 const rateLimited = require('./rate-limited');
 const addQueryParamsToURL = require('./add-query-params-to-url');
@@ -51,11 +52,16 @@ var fetchDocument = function(path) {
   };
   return fetch(storageBaseUrl+path, options)
     .then(res => {
-      res.body.pipe(fs.createWriteStream(backupDir+'/'+path));
-      res.body.on('end', () => {
-        console.log('Wrote '+path);
-        return true;
-      });
+      if ([200, 304].includes(res.status)) {
+        res.body.pipe(fs.createWriteStream(backupDir+'/'+path));
+        res.body.on('end', () => {
+          console.log('Wrote '+path);
+          return true;
+        });
+      } else {
+        console.log(`Error response for ${path}: ${res.status}`.red);
+        return false;
+      }
     })
     .catch(error => handleError(error));
 };
@@ -90,6 +96,7 @@ let fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rate
 
 var handleError = function(error) {
   console.log(error);
+  process.exit(1);
 };
 
 var lookupStorageInfo = function() {

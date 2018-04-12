@@ -25,6 +25,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "colors": "^1.2.1",
     "commander": "^2.9.0",
     "graceful-fs": "^4.1.9",
     "lodash.bind": "^4.2.1",
