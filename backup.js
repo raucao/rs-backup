@@ -50,7 +50,7 @@ var fetchDocument = function(path) {
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
-  return fetch(storageBaseUrl+path, options)
+  return fetch(storageBaseUrl+encodeURI(path), options)
     .then(res => {
       if ([200, 304].includes(res.status)) {
         res.body.pipe(fs.createWriteStream(backupDir+'/'+path));
@@ -73,7 +73,7 @@ var fetchDirectoryContents = function(dir) {
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
-  return fetch(storageBaseUrl+dir, options)
+  return fetch(storageBaseUrl+encodeURI(dir), options)
     .then(res => res.json())
     .then(listing => {
       if (listing.error) { console.log(listing.error); process.exit(1); }
