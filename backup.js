@@ -50,7 +50,7 @@ var fetchDocument = function(path) {
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
-  return fetch(storageBaseUrl+encodeURI(path), options)
+  return fetch(storageBaseUrl+encodeURIComponent(path), options)
     .then(res => {
       if ([200, 304].includes(res.status)) {
         res.body.pipe(fs.createWriteStream(backupDir+'/'+path));

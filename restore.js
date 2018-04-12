@@ -53,7 +53,7 @@ var putDocument = function(path, meta) {
   let body = fs.createReadStream(backupDir+'/'+path);
   let options = { method: 'PUT', body: body, headers: headers };
 
-  return fetch(storageBaseUrl+encodeURI(path), options)
+  return fetch(storageBaseUrl+encodeURIComponent(path), options)
     .then(res => {
       if (res.status === 200 || res.status === 201) {
         console.log(`Restored ${path} (${String(res.status)})`);
