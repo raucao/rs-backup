@@ -9,6 +9,7 @@ const program     = require('commander');
 const fetch       = require('node-fetch');
 const prompt      = require('prompt');
 const opener      = require("opener");
+const colors      = require("colors");
 const discovery   = require('./discovery.js');
 const rateLimited = require('./rate-limited');
 const addQueryParamsToURL = require('./add-query-params-to-url');
@@ -58,7 +59,7 @@ var putDocument = function(path, meta) {
         console.log(`Restored ${path} (${String(res.status)})`);
       } else {
         res.text().then(text => console.log(text));
-        console.log(`Didn't restore ${path} (${String(res.status)})`);
+        console.log(`Error: didn't restore ${path} (${String(res.status)})`.red);
       }
       return true;
     }, error => handleError(error));
