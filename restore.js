@@ -10,6 +10,7 @@ const fetch       = require('node-fetch');
 const prompt      = require('prompt');
 const opener      = require("opener");
 const colors      = require("colors");
+const encodePath  = require('./encode-path');
 const discovery   = require('./discovery.js');
 const rateLimited = require('./rate-limited');
 const addQueryParamsToURL = require('./add-query-params-to-url');
@@ -53,7 +54,7 @@ var putDocument = function(path, meta) {
   let body = fs.createReadStream(backupDir+'/'+path);
   let options = { method: 'PUT', body: body, headers: headers };
 
-  return fetch(storageBaseUrl+encodeURIComponent(path), options)
+  return fetch(storageBaseUrl+encodePath(path), options)
     .then(res => {
       if (res.status === 200 || res.status === 201) {
         console.log(`Restored ${path} (${String(res.status)})`);

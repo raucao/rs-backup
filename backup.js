@@ -13,6 +13,7 @@ const prettyJs    = require('pretty-js');
 const prompt      = require('prompt');
 const opener      = require('opener');
 const colors      = require('colors');
+const encodePath  = require('./encode-path');
 const discovery   = require('./discovery');
 const rateLimited = require('./rate-limited');
 const addQueryParamsToURL = require('./add-query-params-to-url');
@@ -50,7 +51,7 @@ var fetchDocument = function(path) {
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
-  return fetch(storageBaseUrl+encodeURIComponent(path), options)
+  return fetch(storageBaseUrl+encodePath(path), options)
     .then(res => {
       if ([200, 304].includes(res.status)) {
         res.body.pipe(fs.createWriteStream(backupDir+'/'+path));
@@ -73,7 +74,7 @@ var fetchDirectoryContents = function(dir) {
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
-  return fetch(storageBaseUrl+encodeURI(dir), options)
+  return fetch(storageBaseUrl+encodePath(dir), options)
     .then(res => res.json())
     .then(listing => {
       if (listing.error) { console.log(listing.error); process.exit(1); }
