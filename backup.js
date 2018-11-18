@@ -71,6 +71,7 @@ let fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
 
 var fetchDirectoryContents = function(dir) {
   mkdirp.sync(backupDir+'/'+dir);
+
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
@@ -84,8 +85,8 @@ var fetchDirectoryContents = function(dir) {
         handleError(res.error)
       }
     })
-    // .then(res => res.json())
     .then(listing => {
+      // TODO compare with potentially existing listing and only fetch changed dirs and docs
       fs.writeFileSync(backupDir+'/'+dir+'000_folder-description.json',
                        prettyJs(JSON.stringify(listing), {quoteProperties: null}));
 
