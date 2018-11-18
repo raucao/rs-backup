@@ -96,7 +96,7 @@ var fetchDirectoryContents = function(dir) {
 let fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rateLimit);
 
 var handleError = function(error) {
-  console.log(error);
+  console.log(colors.red(error.message));
   process.exit(1);
 };
 
@@ -114,7 +114,7 @@ var lookupStorageInfo = function() {
 };
 
 var executeBackup = function() {
-  console.log('\nStarting backup...\n');
+  console.log('Starting backup...\n');
   rimraf.sync(backupDir); // TODO incremental update
   mkdirp.sync(backupDir);
   fetchDirectoryContents(initialDir);
