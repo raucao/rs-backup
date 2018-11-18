@@ -134,13 +134,13 @@ var schemas = {
     type: 'string',
     pattern: /^.+@.+$/,
     message: 'Please provide a valid user address. Example: tony@5apps.com',
-    required: true,
+    required: true
   },
   token: {
     name: 'token',
     description: 'Authorization token:',
     type: 'string',
-    required: true,
+    required: true
   }
 };
 
@@ -149,9 +149,10 @@ var schemas = {
 if (token && userAddress) {
   lookupStorageInfo().then(executeBackup);
 } else {
-  console.log('No user address and auth token set via options. Please type your user address and hit enter in order to open a browser window and connect your remote storage.'.cyan);
+  console.log('No user address and/or auth token set via options. A browser window will open to connect your account.'.cyan);
   prompt.message = '';
   prompt.delimiter = '';
+  prompt.override = program;
   prompt.start();
 
   prompt.get(schemas.userAddress, (err, result) => {
