@@ -75,10 +75,17 @@ var fetchDirectoryContents = function(dir) {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
   return fetch(storageBaseUrl+encodePath(dir), options)
-    .then(res => res.json())
+    .then(res => {
+      if ([200, 304].includes(res.status)) {
+        return res.json()
+      } else if ([401, 403].includes(res.status))  {
+        throw(Error('App authorization token invalid or missing'))
+      } else {
+        handleError(res.error)
+      }
+    })
+    // .then(res => res.json())
     .then(listing => {
-      if (listing.error) { console.log(listing.error); process.exit(1); }
-
       fs.writeFileSync(backupDir+'/'+dir+'000_folder-description.json',
                        prettyJs(JSON.stringify(listing), {quoteProperties: null}));
 
