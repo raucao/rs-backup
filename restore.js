@@ -2,7 +2,7 @@
 
 'use strict';
 
-const fs          = require('graceful-fs');
+const fs          = require('fs');
 const path        = require('path');
 const pkg         = require(path.join(__dirname, 'package.json'));
 const program     = require('commander');
@@ -51,20 +51,31 @@ var putDocument = function(path, meta) {
     'If-None-Match': '"'+meta['ETag']+'"',
     'User-Agent': "RSBackup/1.0"
   };
-  let body = fs.createReadStream(backupDir+'/'+path);
+
+  let body;
+  try {
+    body = fs.readFileSync(backupDir+'/'+path);
+  } catch(e) {
+    handleError(`could not restore ${path} (${e.message})`);
+  }
+
   let options = { method: 'PUT', body: body, headers: headers };
 
-  return fetch(storageBaseUrl+encodePath(path), options)
-    .then(res => {
-      if (res.status === 200 || res.status === 201) {
-        console.log(`Restored ${path} (${String(res.status)})`);
-      } else {
-        res.text().then(text => console.log(text));
-        console.log(`Error: didn't restore ${path} (${String(res.status)})`.red);
-      }
-      return true;
-    }, error => handleError(error));
+  fetch(storageBaseUrl+encodePath(path), options).then(res => {
+    if (res.status === 200 || res.status === 201) {
+      console.log(`Restored ${path} (${String(res.status)})`);
+    } else {
+      res.text().then(text => console.log(text));
+      handleError(`didn't restore ${path} (${String(res.status)})`);
+    }
+  }, e => {
+    handleError(`could not restore ${path} (${e.message})`);
+  });
 };
+
+let handleError = function(msg) {
+  console.log(`Error: ${msg}`.red)
+}
 
 let putDocumentRateLimited = rateLimited(putDocument, rateLimit);
 
@@ -79,10 +90,6 @@ var putDirectoryContents = function(dir) {
       putDocumentRateLimited(dir+key, meta);
     }
   });
-};
-
-var handleError = function(error) {
-  console.log(error);
 };
 
 var lookupStorageInfo = function() {
