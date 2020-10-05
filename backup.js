@@ -71,8 +71,8 @@ var fetchDocument = function(path) {
     })
     .catch(function (error) {
       if (error.message.match(_timeoutMatch) && _retryMap[path] < retryCount) {
-        console.log(colors.blue(error.message));
-        console.log(`Retrying ${ path }`);
+        console.log(colors.cyan(error.message));
+        console.log(colors.cyan(`Retrying ${ path }`));
 
         _retryMap[path] += 1;
 
@@ -118,8 +118,8 @@ var fetchDirectoryContents = function(dir) {
     })
     .catch(function (error) {
       if (error.message.match(_timeoutMatch) && _retryMap[dir] < retryCount) {
-        console.log(colors.blue(error.message));
-        console.log(`Retrying ${ dir }`);
+        console.log(colors.cyan(error.message));
+        console.log(colors.cyan(`Retrying ${ dir }`));
 
         _retryMap[dir] += 1;
 
