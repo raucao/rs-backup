@@ -31,6 +31,9 @@ const backupDir    = program.backupDir;
 const category     = program.category || '';
 const authScope    = category.length > 0 ? category+':rw' : '*:rw';
 const rateLimit    = program.rateLimit || 20;
+const retryCount   = 3;
+const _retryMap = {};
+const _timeoutMatch = /(ETIMEDOUT|socket hang up|Client network socket disconnected before secure TLS connection was established)/;
 var userAddress    = program.userAddress;
 var token          = program.token;
 var storageBaseUrl = null;
@@ -48,6 +51,8 @@ let isDirectory = function(str) {
 let initialDir = isDirectory(category) || category === '' ? category : category+'/';
 
 var fetchDocument = function(path) {
+  _retryMap[path] = _retryMap[path] || 0;
+
   let options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
@@ -64,7 +69,18 @@ var fetchDocument = function(path) {
         return false;
       }
     })
-    .catch(error => handleError(error));
+    .catch(function (error) {
+      if (error.message.match(_timeoutMatch) && _retryMap[path] < retryCount) {
+        console.log(colors.blue(error.message));
+        console.log(`Retrying ${ path }`);
+
+        _retryMap[path] += 1;
+
+        return fetchDocument(path);
+      }
+
+      return handleError(error);
+    });
 };
 
 let fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
