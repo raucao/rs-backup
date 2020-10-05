@@ -86,6 +86,8 @@ var fetchDocument = function(path) {
 let fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
 
 var fetchDirectoryContents = function(dir) {
+  _retryMap[dir] = _retryMap[dir] || 0;
+
   mkdirp.sync(backupDir+'/'+dir);
 
   let options = {
@@ -114,7 +116,18 @@ var fetchDirectoryContents = function(dir) {
         }
       });
     })
-    .catch(error => handleError(error));
+    .catch(function (error) {
+      if (error.message.match(_timeoutMatch) && _retryMap[dir] < retryCount) {
+        console.log(colors.blue(error.message));
+        console.log(`Retrying ${ dir }`);
+
+        _retryMap[dir] += 1;
+
+        return fetchDocument(dir);
+      }
+
+      return handleError(error);
+    });
 };
 
 let fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rateLimit);
