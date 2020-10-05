@@ -34,6 +34,7 @@ const rateLimit    = program.rateLimit || 20;
 const retryCount   = 3;
 const _retryMap = {};
 const _timeoutMatch = /(ETIMEDOUT|socket hang up|Client network socket disconnected before secure TLS connection was established)/;
+const _retryDelay = 1000;
 var userAddress    = program.userAddress;
 var token          = program.token;
 var storageBaseUrl = null;
@@ -76,7 +77,11 @@ var fetchDocument = function(path) {
 
         _retryMap[path] += 1;
 
-        return fetchDocument(path);
+        return new Promise(function (res) {
+          setTimeout(function () {
+            return res(fetchDocument(path));
+          }, _retryDelay);
+        });
       }
 
       return handleError(error);
@@ -123,7 +128,11 @@ var fetchDirectoryContents = function(dir) {
 
         _retryMap[dir] += 1;
 
-        return fetchDocument(dir);
+        return new Promise(function (res) {
+          setTimeout(function () {
+            return res(fetchDocument(dir));
+          }, _retryDelay);
+        });
       }
 
       return handleError(error);
