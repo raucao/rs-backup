@@ -33,7 +33,7 @@ const authScope    = category.length > 0 ? category+':rw' : '*:rw';
 const rateLimit    = program.rateLimit || 20;
 const retryCount   = 3;
 const _retryMap = {};
-const _timeoutMatch = /(ETIMEDOUT|socket hang up|Client network socket disconnected before secure TLS connection was established)/;
+const _retryMatch = /(ETIMEDOUT|socket hang up|Client network socket disconnected before secure TLS connection was established)/;
 const _retryDelay = 1000;
 var userAddress    = program.userAddress;
 var token          = program.token;
@@ -71,7 +71,7 @@ var fetchDocument = function(path) {
       }
     })
     .catch(function (error) {
-      if (error.message.match(_timeoutMatch) && _retryMap[path] < retryCount) {
+      if (error.message.match(_retryMatch) && _retryMap[path] < retryCount) {
         console.log(colors.cyan(error.message));
         console.log(colors.cyan(`Retrying ${ path }`));
 
@@ -122,7 +122,7 @@ var fetchDirectoryContents = function(dir) {
       });
     })
     .catch(function (error) {
-      if (error.message.match(_timeoutMatch) && _retryMap[dir] < retryCount) {
+      if (error.message.match(_retryMatch) && _retryMap[dir] < retryCount) {
         console.log(colors.cyan(error.message));
         console.log(colors.cyan(`Retrying ${ dir }`));
 
