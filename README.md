@@ -5,8 +5,8 @@ to a local hard drive and restore it to the same or another account or server.
 
 ## Install
 
-You'll need node.js `>=5.0.0` on your computer. (You're welcome to test with
-older versions and tell me if it works.)
+You'll need node.js on your computer. (The program requires at least the
+current LTS version, but likely works with newer versions.)
 
     npm install -g rs-backup
 
