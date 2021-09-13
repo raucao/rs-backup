@@ -21,14 +21,16 @@ const addQueryParamsToURL = require('./add-query-params-to-url');
 program
   .version(pkg.version)
   .option('-o, --backup-dir <path>', 'backup directory path')
-  .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-t, --token <token>', 'valid bearer token')
+  .option('-c, --category <category>', 'category (base directory) to back up')
+  .option('-p, --include-public', 'when backing up a single category, include the public folder of that category')
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 20)')
   .parse(process.argv);
 
 const backupDir     = program.backupDir;
 const category      = program.category || '';
+const includePublic = program.includePublic || false;
 const authScope     = category.length > 0 ? category+':rw' : '*:rw';
 const rateLimit     = program.rateLimit || 20;
 let userAddress     = program.userAddress;
@@ -46,6 +48,11 @@ const isDirectory = function(str) {
 };
 
 const initialDir = isDirectory(category) || category === '' ? category : category+'/';
+
+let publicDir = null;
+if (category !== '') {
+  publicDir = `public/${initialDir}`;
+}
 
 const handleError = function(error) {
   console.log(colors.red(error.message));
@@ -126,6 +133,9 @@ const executeBackup = function() {
   rimraf.sync(backupDir); // TODO incremental update
   mkdirp.sync(backupDir);
   fetchDirectoryContents(initialDir);
+  if (includePublic && publicDir) {
+    fetchDirectoryContents(publicDir);
+  }
 };
 
 const schemas = {

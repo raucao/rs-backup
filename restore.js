@@ -18,14 +18,16 @@ const addQueryParamsToURL = require('./add-query-params-to-url');
 program
   .version(pkg.version)
   .option('-i, --backup-dir <path>', 'backup directory path')
-  .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-t, --token <token>', 'valid bearer token')
+  .option('-c, --category <category>', 'category (base directory) to back up')
+  .option('-p, --include-public', 'when backing up a single category, include the public folder of that category')
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)')
   .parse(process.argv);
 
 const backupDir     = program.backupDir;
 const category      = program.category || '';
+const includePublic = program.includePublic || false;
 const authScope     = category.length > 0 ? category+':rw' : '*:rw';
 const rateLimit     = program.rateLimit || 40;
 let userAddress     = program.userAddress;
@@ -44,8 +46,11 @@ const isDirectory = function(str) {
 
 const initialDir = isDirectory(category) || category === '' ? category : category+'/';
 
-var putDocument = function(path, meta) {
-  let headers = {
+let publicDir;
+if (category !== '') {
+  publicDir = `public/${initialDir}`;
+}
+
 const handleError = function(msg) {
   console.log(`Error: ${msg}`.red)
 }
@@ -79,14 +84,21 @@ const putDocument = function(path, meta) {
   });
 };
 
-let handleError = function(msg) {
-  console.log(`Error: ${msg}`.red)
-}
-
-let putDocumentRateLimited = rateLimited(putDocument, rateLimit);
+const putDocumentRateLimited = rateLimited(putDocument, rateLimit);
 
 const putDirectoryContents = function(dir) {
   let listing = null;
+  try {
+    listing = JSON.parse(fs.readFileSync(backupDir+'/'+dir+'000_folder-description.json'));
+  } catch(e) {
+    if (e.code === 'ENOENT') {
+      console.log(`No description file found for folder '${dir}'. Skipping.`);
+    } else {
+      console.log('Error:', e.message);
+      console.log(`Errored trying to access folder description for '${dir}'. Skipping.`);
+    }
+  }
+  if (!listing) return;
 
   Object.keys(listing.items).forEach(key => {
     if (isDirectory(key)) {
@@ -114,6 +126,9 @@ const lookupStorageInfo = function() {
 const executeRestore = function() {
   console.log('\nStarting restore...\n');
   putDirectoryContents(initialDir);
+  if (includePublic && publicDir) {
+    putDirectoryContents(publicDir);
+  }
 };
 
 const schemas = {
