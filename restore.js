@@ -18,19 +18,21 @@ const addQueryParamsToURL = require('./add-query-params-to-url');
 program
   .version(pkg.version)
   .option('-i, --backup-dir <path>', 'backup directory path')
-  .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-u, --user-address <user address>', 'user address (user@host)')
   .option('-t, --token <token>', 'valid bearer token')
+  .option('-c, --category <category>', 'category (base directory) to back up')
+  .option('-p, --include-public', 'when backing up a single category, include the public folder of that category')
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)')
   .parse(process.argv);
 
-const backupDir    = program.backupDir;
-const category     = program.category || '';
-const authScope    = category.length > 0 ? category+':rw' : '*:rw';
-const rateLimit    = program.rateLimit || 40;
-var userAddress    = program.userAddress;
-var token          = program.token;
-var storageBaseUrl = null;
+const backupDir     = program.backupDir;
+const category      = program.category || '';
+const includePublic = program.includePublic || false;
+const authScope     = category.length > 0 ? category+':rw' : '*:rw';
+const rateLimit     = program.rateLimit || 40;
+let userAddress     = program.userAddress;
+let token           = program.token;
+let storageBaseUrl  = null;
 
 if (!(backupDir)) {
   // TODO ask or use default
@@ -38,14 +40,23 @@ if (!(backupDir)) {
   process.exit(1);
 }
 
-let isDirectory = function(str) {
+const isDirectory = function(str) {
   return str[str.length-1] === '/';
 };
 
-let initialDir = isDirectory(category) || category === '' ? category : category+'/';
+const initialDir = isDirectory(category) || category === '' ? category : category+'/';
 
-var putDocument = function(path, meta) {
-  let headers = {
+let publicDir;
+if (category !== '') {
+  publicDir = `public/${initialDir}`;
+}
+
+const handleError = function(msg) {
+  console.log(`Error: ${msg}`.red)
+}
+
+const putDocument = function(path, meta) {
+  const headers = {
     'Authorization': `Bearer ${token}`,
     'Content-Type': meta['Content-Type'],
     'If-None-Match': '"'+meta['ETag']+'"',
@@ -59,9 +70,9 @@ var putDocument = function(path, meta) {
     handleError(`could not restore ${path} (${e.message})`);
   }
 
-  let options = { method: 'PUT', body: body, headers: headers };
+  const options = { method: 'PUT', body: body, headers: headers };
 
-  fetch(storageBaseUrl+encodePath(path), options).then(res => {
+  return fetch(storageBaseUrl+encodePath(path), options).then(res => {
     if (res.status === 200 || res.status === 201) {
       console.log(`Restored ${path} (${String(res.status)})`);
     } else {
@@ -73,26 +84,33 @@ var putDocument = function(path, meta) {
   });
 };
 
-let handleError = function(msg) {
-  console.log(`Error: ${msg}`.red)
-}
+const putDocumentRateLimited = rateLimited(putDocument, rateLimit);
 
-let putDocumentRateLimited = rateLimited(putDocument, rateLimit);
-
-var putDirectoryContents = function(dir) {
-  let listing = JSON.parse(fs.readFileSync(backupDir+'/'+dir+'000_folder-description.json'));
+const putDirectoryContents = function(dir) {
+  let listing = null;
+  try {
+    listing = JSON.parse(fs.readFileSync(backupDir+'/'+dir+'000_folder-description.json'));
+  } catch(e) {
+    if (e.code === 'ENOENT') {
+      console.log(`No description file found for folder '${dir}'. Skipping.`);
+    } else {
+      console.log('Error:', e.message);
+      console.log(`Errored trying to access folder description for '${dir}'. Skipping.`);
+    }
+  }
+  if (!listing) return;
 
   Object.keys(listing.items).forEach(key => {
     if (isDirectory(key)) {
       putDirectoryContents(dir+key);
     } else {
-      let meta = listing.items[key];
+      const meta = listing.items[key];
       putDocumentRateLimited(dir+key, meta);
     }
   });
 };
 
-var lookupStorageInfo = function() {
+const lookupStorageInfo = function() {
   return discovery.lookup(userAddress).then(storageInfo => {
     let href = storageInfo.href;
     if (href[href.length-1] !== '/') { href = href+'/'; }
@@ -105,12 +123,15 @@ var lookupStorageInfo = function() {
   });
 };
 
-var executeRestore = function() {
+const executeRestore = function() {
   console.log('\nStarting restore...\n');
   putDirectoryContents(initialDir);
+  if (includePublic && publicDir) {
+    putDirectoryContents(publicDir);
+  }
 };
 
-var schemas = {
+const schemas = {
   userAddress: {
     name: 'userAddress',
     description: 'User address (user@host):',
@@ -141,7 +162,7 @@ if (token && userAddress) {
     userAddress = result.userAddress;
 
     lookupStorageInfo().then(storageInfo => {
-      let authURL = addQueryParamsToURL(storageInfo.authURL, {
+      const authURL = addQueryParamsToURL(storageInfo.authURL, {
         client_id: 'rs-backup.5apps.com',
         redirect_uri: 'https://rs-backup.5apps.com/',
         response_type: 'token',
