@@ -27,13 +27,13 @@ program
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 20)')
   .parse(process.argv);
 
-const backupDir    = program.backupDir;
-const category     = program.category || '';
-const authScope    = category.length > 0 ? category+':rw' : '*:rw';
-const rateLimit    = program.rateLimit || 20;
-var userAddress    = program.userAddress;
-var token          = program.token;
-var storageBaseUrl = null;
+const backupDir     = program.backupDir;
+const category      = program.category || '';
+const authScope     = category.length > 0 ? category+':rw' : '*:rw';
+const rateLimit     = program.rateLimit || 20;
+let userAddress     = program.userAddress;
+let token           = program.token;
+let storageBaseUrl  = null;
 
 if (!(backupDir)) {
   // TODO ask or use default
@@ -41,14 +41,19 @@ if (!(backupDir)) {
   process.exit(1);
 }
 
-let isDirectory = function(str) {
+const isDirectory = function(str) {
   return str[str.length-1] === '/';
 };
 
-let initialDir = isDirectory(category) || category === '' ? category : category+'/';
+const initialDir = isDirectory(category) || category === '' ? category : category+'/';
 
-var fetchDocument = function(path) {
-  let options = {
+const handleError = function(error) {
+  console.log(colors.red(error.message));
+  process.exit(1);
+};
+
+const fetchDocument = function(path) {
+  const options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
   return fetch(storageBaseUrl+encodePath(path), options)
@@ -67,12 +72,12 @@ var fetchDocument = function(path) {
     .catch(error => handleError(error));
 };
 
-let fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
+const fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
 
-var fetchDirectoryContents = function(dir) {
+const fetchDirectoryContents = function(dir) {
   mkdirp.sync(backupDir+'/'+dir);
 
-  let options = {
+  const options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
   return fetch(storageBaseUrl+encodePath(dir), options)
@@ -101,14 +106,9 @@ var fetchDirectoryContents = function(dir) {
     .catch(error => handleError(error));
 };
 
-let fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rateLimit);
+const fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rateLimit);
 
-var handleError = function(error) {
-  console.log(colors.red(error.message));
-  process.exit(1);
-};
-
-var lookupStorageInfo = function() {
+const lookupStorageInfo = function() {
   return discovery.lookup(userAddress).then(storageInfo => {
     let href = storageInfo.href;
     if (href[href.length-1] !== '/') { href = href+'/'; }
@@ -121,14 +121,14 @@ var lookupStorageInfo = function() {
   });
 };
 
-var executeBackup = function() {
+const executeBackup = function() {
   console.log('Starting backup...\n');
   rimraf.sync(backupDir); // TODO incremental update
   mkdirp.sync(backupDir);
   fetchDirectoryContents(initialDir);
 };
 
-var schemas = {
+const schemas = {
   userAddress: {
     name: 'userAddress',
     description: 'User address (user@host):',
@@ -160,7 +160,7 @@ if (token && userAddress) {
     userAddress = result.userAddress;
 
     lookupStorageInfo().then(storageInfo => {
-      let authURL = addQueryParamsToURL(storageInfo.authURL, {
+      const authURL = addQueryParamsToURL(storageInfo.authURL, {
         client_id: 'rs-backup.5apps.com',
         redirect_uri: 'https://rs-backup.5apps.com/',
         response_type: 'token',
