@@ -3,8 +3,7 @@
   "version": "1.7.1",
   "description": "Backup and restore data from/to a remoteStorage account",
   "keywords": [
-    "remotestorage",
-    "rs"
+    "remotestorage"
   ],
   "bin": {
     "rs-backup": "./backup.js",
@@ -18,10 +17,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/skddc/rs-backup.git"
+    "url": "https://github.com/raucao/rs-backup.git"
   },
   "bugs": {
-    "url": "https://github.com/skddc/rs-backup/issues"
+    "url": "https://github.com/raucao/rs-backup/issues"
   },
   "license": "MIT",
   "dependencies": {
