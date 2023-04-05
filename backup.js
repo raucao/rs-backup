@@ -33,6 +33,10 @@ const category      = program.category || '';
 const includePublic = program.includePublic || false;
 const authScope     = category.length > 0 ? category+':rw' : '*:rw';
 const rateLimit     = program.rateLimit || 20;
+const retryCount    = 3;
+const retryDelay    = 1000;
+const retryMatch    = /(ETIMEDOUT|socket hang up|Client network socket disconnected before secure TLS connection was established|ENETDOWN|ECONNRESET|ENOTFOUND)/;
+const _retryMap     = {};
 let userAddress     = program.userAddress;
 let token           = program.token;
 let storageBaseUrl  = null;
@@ -60,6 +64,8 @@ const handleError = function(error) {
 };
 
 const fetchDocument = function(path) {
+  _retryMap[path] = _retryMap[path] || 0;
+
   const options = {
     headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
   };
@@ -76,12 +82,29 @@ const fetchDocument = function(path) {
         return false;
       }
     })
-    .catch(error => handleError(error));
+    .catch(function (error) {
+      if (error.message.match(retryMatch) && (_retryMap[path] < retryCount)) {
+        console.log(colors.cyan(error.message));
+        console.log(colors.cyan(`Retrying ${ path }`));
+
+        _retryMap[path] += 1;
+
+        return new Promise(function (res) {
+          setTimeout(function () {
+            return res(fetchDocument(path));
+          }, retryDelay);
+        });
+      }
+
+      return handleError(error);
+    });
 };
 
 const fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
 
 const fetchDirectoryContents = function(dir) {
+  _retryMap[dir] = _retryMap[dir] || 0;
+
   mkdirp.sync(backupDir+'/'+dir);
 
   const options = {
@@ -110,7 +133,22 @@ const fetchDirectoryContents = function(dir) {
         }
       });
     })
-    .catch(error => handleError(error));
+    .catch(function (error) {
+      if (error.message.match(retryMatch) && (_retryMap[dir] < retryCount)) {
+        console.log(colors.cyan(error.message));
+        console.log(colors.cyan(`Retrying ${ dir }`));
+
+        _retryMap[dir] += 1;
+
+        return new Promise(function (res) {
+          setTimeout(function () {
+            return res(fetchDocument(dir));
+          }, retryDelay);
+        });
+      }
+
+      return handleError(error);
+    });
 };
 
 const fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rateLimit);
