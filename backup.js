@@ -67,7 +67,7 @@ const fetchDocument = function(path) {
   _retryMap[path] = _retryMap[path] || 0;
 
   const options = {
-    headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
+    headers: { "Authorization": `Bearer ${token}`, "User-Agent": `RSBackup/${program._version}` }
   };
   return fetch(storageBaseUrl+encodePath(path), options)
     .then(res => {
