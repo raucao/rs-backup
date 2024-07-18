@@ -28,6 +28,7 @@ program
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 20)')
   .parse(process.argv);
 
+const ORIGIN = 'https://rs-backup.5apps.com';
 const backupDir     = program.backupDir;
 const category      = program.category || '';
 const includePublic = program.includePublic || false;
@@ -67,7 +68,7 @@ const fetchDocument = function(path) {
   _retryMap[path] = _retryMap[path] || 0;
 
   const options = {
-    headers: { "Authorization": `Bearer ${token}`, "User-Agent": `RSBackup/${program._version}` }
+    headers: { "Authorization": `Bearer ${token}`, "User-Agent": `RSBackup/${program._version}`, "Origin": ORIGIN }
   };
   return fetch(storageBaseUrl+encodePath(path), options)
     .then(res => {
@@ -108,7 +109,7 @@ const fetchDirectoryContents = function(dir) {
   mkdirp.sync(backupDir+'/'+dir);
 
   const options = {
-    headers: { "Authorization": `Bearer ${token}`, "User-Agent": "RSBackup/1.0" }
+    headers: { "Authorization": `Bearer ${token}`, "User-Agent": `RSBackup/${program._version}`, "Origin": ORIGIN }
   };
   return fetch(storageBaseUrl+encodePath(dir), options)
     .then(res => {
@@ -210,7 +211,7 @@ if (token && userAddress) {
     lookupStorageInfo().then(storageInfo => {
       const authURL = addQueryParamsToURL(storageInfo.authURL, {
         client_id: 'rs-backup.5apps.com',
-        redirect_uri: 'https://rs-backup.5apps.com/',
+        redirect_uri: ORIGIN + '/',
         response_type: 'token',
         scope: authScope
       });

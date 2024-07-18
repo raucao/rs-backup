@@ -25,6 +25,7 @@ program
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)')
   .parse(process.argv);
 
+const ORIGIN = 'https://rs-backup.5apps.com';
 const backupDir     = program.backupDir;
 const category      = program.category || '';
 const includePublic = program.includePublic || false;
@@ -60,7 +61,8 @@ const putDocument = function(path, meta) {
     'Authorization': `Bearer ${token}`,
     'Content-Type': meta['Content-Type'],
     'If-None-Match': '"'+meta['ETag']+'"',
-    'User-Agent': "RSBackup/1.0"
+    'User-Agent': "RSBackup/1.0",
+    'Origin': ORIGIN
   };
 
   let body;
@@ -164,7 +166,7 @@ if (token && userAddress) {
     lookupStorageInfo().then(storageInfo => {
       const authURL = addQueryParamsToURL(storageInfo.authURL, {
         client_id: 'rs-backup.5apps.com',
-        redirect_uri: 'https://rs-backup.5apps.com/',
+        redirect_uri: ORIGIN + '/',
         response_type: 'token',
         scope: authScope
       });
