@@ -25,7 +25,7 @@ program
   .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)')
   .parse(process.argv);
 
-const ORIGIN = 'https://rs-backup.5apps.com';
+const ORIGIN        = 'https://rs-backup.5apps.com';
 const backupDir     = program.backupDir;
 const category      = program.category || '';
 const includePublic = program.includePublic || false;
