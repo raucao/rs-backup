@@ -5,11 +5,12 @@
 const fs          = require('fs');
 const path        = require('path');
 const pkg         = require(path.join(__dirname, 'package.json'));
-const program     = require('commander');
-const fetch       = require('node-fetch');
+const { program } = require('commander');
+const fetch       = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const prompt      = require('prompt');
 const opener      = require("opener");
 const colors      = require("colors");
+
 const encodePath  = require('./encode-path');
 const discovery   = require('./discovery.js');
 const rateLimited = require('./rate-limited');
@@ -22,17 +23,20 @@ program
   .option('-t, --token <token>', 'valid bearer token')
   .option('-c, --category <category>', 'category (base directory) to back up')
   .option('-p, --include-public', 'when backing up a single category, include the public folder of that category')
-  .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)')
-  .parse(process.argv);
+  .option('-r, --rate-limit <time>', 'time interval for network requests in ms (default is 40)');
+
+program.parse(process.argv);
+const options = program.opts();
 
 const ORIGIN        = 'https://rs-backup.5apps.com';
-const backupDir     = program.backupDir;
-const category      = program.category || '';
-const includePublic = program.includePublic || false;
+const backupDir     = options.backupDir;
+const category      = options.category || '';
+const includePublic = options.includePublic || false;
 const authScope     = category.length > 0 ? category+':rw' : '*:rw';
-const rateLimit     = program.rateLimit || 40;
-let userAddress     = program.userAddress;
-let token           = program.token;
+const rateLimit     = options.rateLimit || 40;
+
+let userAddress     = options.userAddress;
+let token           = options.token;
 let storageBaseUrl  = null;
 
 if (!(backupDir)) {
