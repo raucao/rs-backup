@@ -61,7 +61,7 @@ const putDocument = function(path, meta) {
     'Authorization': `Bearer ${token}`,
     'Content-Type': meta['Content-Type'],
     'If-None-Match': '"'+meta['ETag']+'"',
-    'User-Agent': "RSBackup/1.0",
+    'User-Agent': `RSBackup/${program._version}`,
     'Origin': ORIGIN
   };
 
