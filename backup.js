@@ -6,13 +6,14 @@ const fs          = require('graceful-fs');
 const path        = require('path');
 const pkg         = require(path.join(__dirname, 'package.json'));
 const program     = require('commander');
-const fetch       = require('node-fetch');
+const fetch       = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const mkdirp      = require('mkdirp');
 const rimraf      = require('rimraf');
 const prettyJs    = require('pretty-js');
 const prompt      = require('prompt');
 const opener      = require('opener');
 const colors      = require('colors');
+
 const encodePath  = require('./encode-path');
 const discovery   = require('./discovery');
 const rateLimited = require('./rate-limited');
