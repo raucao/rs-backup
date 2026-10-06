@@ -9,6 +9,11 @@ test('encodePath encodes components but preserves slashes', () => {
   assert.equal(encodePath('muc.5apps.com/'), 'muc.5apps.com/');
 });
 
+test('encodePath encodes hash characters so they cannot be treated as a URL fragment', () => {
+  assert.equal(encodePath('#foo/'), '%23foo/');
+  assert.equal(encodePath('a#b/c.txt'), 'a%23b/c.txt');
+});
+
 test('addQueryParamsToURL appends params with a question mark', () => {
   const url = addQueryParamsToURL('https://auth.example.com/oauth', {
     client_id: 'rs-backup.5apps.com',
