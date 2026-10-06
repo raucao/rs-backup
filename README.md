@@ -8,7 +8,7 @@ account or server.
 
 ## Install
 
-With [node.js][2] and npm installed on your computer:
+With [node.js][2] (version 20.16 or newer) and npm installed on your computer:
 
     npm install -g rs-backup
 

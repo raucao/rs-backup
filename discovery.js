@@ -1,56 +1,33 @@
-#!/usr/bin/env node
+import WebFinger from 'webfinger.js';
 
-'use strict';
-
-const WebFinger = require('webfinger.js');
-
-Promise.defer = function() {
-  var resolve, reject;
-  var promise = new Promise(function() {
-    resolve = arguments[0];
-    reject = arguments[1];
-  });
-  return {
-    resolve: resolve,
-    reject: reject,
-    promise: promise
-  };
-};
-
-let discovery = {
-
-  lookup(userAddress) {
-    let pending = Promise.defer();
-
-    let webfinger = new WebFinger({
+const discovery = {
+  async lookup(userAddress) {
+    const webfinger = new WebFinger({
       tls_only: false,
       uri_fallback: false,
-      request_timeout: 5000
+      request_timeout: 5000,
+      allow_private_addresses: true
     });
 
-    webfinger.lookup(userAddress, function (err, response) {
-      if (err) {
-        return pending.reject(err.message);
-      } else if ((typeof response.idx.links.remotestorage !== 'object') ||
-                 (typeof response.idx.links.remotestorage.length !== 'number') ||
-                 (response.idx.links.remotestorage.length <= 0)) {
-        return pending.reject("WebFinger record for " + userAddress + " does not have remotestorage defined in the links section.");
-      }
-      let rs      = response.idx.links.remotestorage[0];
-      let authURL = rs.properties['http://tools.ietf.org/html/rfc6749#section-4.2'] || rs.properties['auth-endpoint'];
-      let version = rs.properties['http://remotestorage.io/spec/version'] || rs.type;
+    const response = await webfinger.lookup(userAddress);
+    const remoteStorage = response.idx.links.remotestorage;
 
-      pending.resolve({
-        href: rs.href,
-        authURL: authURL,
-        version: version,
-        properties: rs.properties
-      });
-    });
+    if (!Array.isArray(remoteStorage) || remoteStorage.length <= 0) {
+      throw new Error(`WebFinger record for ${userAddress} does not have remotestorage defined in the links section.`);
+    }
 
-    return pending.promise;
+    const rs = remoteStorage[0];
+    const properties = rs.properties ?? {};
+    const authURL = properties['http://tools.ietf.org/html/rfc6749#section-4.2'] || properties['auth-endpoint'];
+    const version = properties['http://remotestorage.io/spec/version'] || rs.type;
+
+    return {
+      href: rs.href,
+      authURL,
+      version,
+      properties
+    };
   }
-
 };
 
-module.exports = discovery;
+export default discovery;
