@@ -1,23 +1,21 @@
 #!/usr/bin/env node
 
-'use strict';
+import fs, { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { program } from 'commander';
+import open from 'open';
+import pc from 'picocolors';
 
-const fs          = require('graceful-fs');
-const path        = require('path');
-const pkg         = require(path.join(__dirname, 'package.json'));
-const { program } = require('commander');
-const fetch       = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const mkdirp      = require('mkdirp');
-const rimraf      = require('rimraf');
-const prettyJs    = require('pretty-js');
-const prompt      = require('prompt');
-const opener      = require('opener');
-const colors      = require('colors');
+import encodePath from './encode-path.js';
+import discovery from './discovery.js';
+import rateLimited from './rate-limited.js';
+import addQueryParamsToURL from './add-query-params-to-url.js';
 
-const encodePath  = require('./encode-path');
-const discovery   = require('./discovery');
-const rateLimited = require('./rate-limited');
-const addQueryParamsToURL = require('./add-query-params-to-url');
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url)));
 
 program
   .version(pkg.version)
@@ -40,14 +38,12 @@ const rateLimit     = options.rateLimit || 20;
 const retryCount    = 3;
 const retryDelay    = 1000;
 const retryMatch    = /(ETIMEDOUT|socket hang up|Client network socket disconnected before secure TLS connection was established|ENETDOWN|ECONNRESET|ENOTFOUND)/;
-const _retryMap     = {};
 
-let userAddress     = options.userAddress;
-let token           = options.token;
-let storageBaseUrl  = null;
+let userAddress    = options.userAddress;
+let token          = options.token;
+let storageBaseUrl = null;
 
-if (!(backupDir)) {
-  // TODO ask or use default
+if (!backupDir) {
   console.log('Please provide a backup directory path via the --backup-dir option');
   process.exit(1);
 }
@@ -64,168 +60,147 @@ if (category !== '') {
 }
 
 const handleError = function(error) {
-  console.log(colors.red(error.message));
+  console.log(pc.red(error.message ?? String(error)));
   process.exit(1);
 };
 
-const fetchDocument = function(path) {
-  _retryMap[path] = _retryMap[path] || 0;
-
-  const options = {
-    headers: { "Authorization": `Bearer ${token}`, "User-Agent": `RSBackup/${program._version}`, "Origin": ORIGIN }
+const authHeaders = function() {
+  return {
+    'Authorization': `Bearer ${token}`,
+    'User-Agent': `RSBackup/${pkg.version}`,
+    'Origin': ORIGIN
   };
-  return fetch(storageBaseUrl+encodePath(path), options)
-    .then(res => {
-      if ([200, 304].includes(res.status)) {
-        res.body.pipe(fs.createWriteStream(backupDir+'/'+path));
-        res.body.on('end', () => {
-          console.log('Wrote '+path);
-          return true;
-        });
-      } else {
-        console.log(`Error response for ${path}: ${res.status}`.red);
-        return false;
-      }
-    })
-    .catch(function (error) {
-      if (error.message.match(retryMatch) && (_retryMap[path] < retryCount)) {
-        console.log(colors.cyan(error.message));
-        console.log(colors.cyan(`Retrying ${ path }`));
-
-        _retryMap[path] += 1;
-
-        return new Promise(function (res) {
-          setTimeout(function () {
-            return res(fetchDocument(path));
-          }, retryDelay);
-        });
-      }
-
-      return handleError(error);
-    });
 };
 
-const fetchDocumentRateLimited = rateLimited(fetchDocument, rateLimit);
+const fetchWithRetry = async function(url, label) {
+  let attempt = 0;
 
-const fetchDirectoryContents = function(dir) {
-  _retryMap[dir] = _retryMap[dir] || 0;
-
-  mkdirp.sync(backupDir+'/'+dir);
-
-  const options = {
-    headers: { "Authorization": `Bearer ${token}`, "User-Agent": `RSBackup/${program._version}`, "Origin": ORIGIN }
-  };
-  return fetch(storageBaseUrl+encodePath(dir), options)
-    .then(res => {
-      if ([200, 304].includes(res.status)) {
-        return res.json()
-      } else if ([401, 403].includes(res.status))  {
-        throw(Error('App authorization token invalid or missing'))
-      } else {
-        handleError(res.error)
+  while (true) {
+    try {
+      return await fetch(url, { headers: authHeaders() });
+    } catch (error) {
+      if (error.message.match(retryMatch) && attempt < retryCount) {
+        attempt += 1;
+        console.log(pc.cyan(error.message));
+        console.log(pc.cyan(`Retrying ${label}`));
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        continue;
       }
-    })
-    .then(listing => {
-      // TODO compare with potentially existing listing and only fetch changed dirs and docs
-      fs.writeFileSync(backupDir+'/'+dir+'000_folder-description.json',
-                       prettyJs(JSON.stringify(listing), {quoteProperties: null}));
-
-      Object.keys(listing.items).forEach(key => {
-        if (isDirectory(key)) {
-          fetchDirectoryContentsRateLimited(dir+key);
-        } else {
-          fetchDocumentRateLimited(dir+key);
-        }
-      });
-    })
-    .catch(function (error) {
-      if (error.message.match(retryMatch) && (_retryMap[dir] < retryCount)) {
-        console.log(colors.cyan(error.message));
-        console.log(colors.cyan(`Retrying ${ dir }`));
-
-        _retryMap[dir] += 1;
-
-        return new Promise(function (res) {
-          setTimeout(function () {
-            return res(fetchDocument(dir));
-          }, retryDelay);
-        });
-      }
-
-      return handleError(error);
-    });
+      throw error;
+    }
+  }
 };
 
-const fetchDirectoryContentsRateLimited = rateLimited(fetchDirectoryContents, rateLimit);
+const fetchRateLimited = rateLimited(fetchWithRetry, rateLimit);
 
-const lookupStorageInfo = function() {
-  return discovery.lookup(userAddress).then(storageInfo => {
+const fetchDocument = async function(path) {
+  const res = await fetchRateLimited(storageBaseUrl+encodePath(path), path);
+
+  if ([200, 304].includes(res.status)) {
+    await pipeline(
+      Readable.fromWeb(res.body),
+      fs.createWriteStream(join(backupDir, path))
+    );
+    console.log('Wrote '+path);
+    return true;
+  } else {
+    console.log(pc.red(`Error response for ${path}: ${res.status}`));
+    return false;
+  }
+};
+
+const fetchDirectoryContents = async function(dir) {
+  fs.mkdirSync(join(backupDir, dir), { recursive: true });
+
+  const res = await fetchRateLimited(storageBaseUrl+encodePath(dir), dir);
+
+  if ([200, 304].includes(res.status)) {
+    const listing = await res.json();
+
+    fs.writeFileSync(
+      join(backupDir, dir, '000_folder-description.json'),
+      JSON.stringify(listing, null, 2) + '\n'
+    );
+
+    await Promise.all(Object.keys(listing.items).map((key) => {
+      if (isDirectory(key)) {
+        return fetchDirectoryContents(dir+key);
+      } else {
+        return fetchDocument(dir+key);
+      }
+    }));
+  } else if ([401, 403].includes(res.status)) {
+    throw new Error('App authorization token invalid or missing');
+  } else {
+    throw new Error(`Error response for ${dir}: ${res.status}`);
+  }
+};
+
+const lookupStorageInfo = async function() {
+  try {
+    const storageInfo = await discovery.lookup(userAddress);
     let href = storageInfo.href;
     if (href[href.length-1] !== '/') { href = href+'/'; }
     storageBaseUrl = href;
     return storageInfo;
-  }).catch(error => {
+  } catch (error) {
     console.log('Lookup of '+userAddress+' failed:');
     console.log(error);
     process.exit(1);
-  });
-};
-
-const executeBackup = function() {
-  console.log('Starting backup...\n');
-  rimraf.sync(backupDir); // TODO incremental update
-  mkdirp.sync(backupDir);
-  fetchDirectoryContents(initialDir);
-  if (includePublic && publicDir) {
-    fetchDirectoryContents(publicDir);
   }
 };
 
-const schemas = {
-  userAddress: {
-    name: 'userAddress',
-    description: 'User address (user@host):',
-    type: 'string',
-    pattern: /^.+@.+$/,
-    message: 'Please provide a valid user address. Example: tony@5apps.com',
-    required: true
-  },
-  token: {
-    name: 'token',
-    description: 'Authorization token:',
-    type: 'string',
-    required: true
+const executeBackup = async function() {
+  console.log('Starting backup...\n');
+  fs.rmSync(backupDir, { recursive: true, force: true });
+  fs.mkdirSync(backupDir, { recursive: true });
+  await fetchDirectoryContents(initialDir);
+  if (includePublic && publicDir) {
+    await fetchDirectoryContents(publicDir);
+  }
+};
+
+const promptUserAddress = async function(rl) {
+  while (true) {
+    const answer = (await rl.question('User address (user@host): ')).trim();
+    if (/^.+@.+$/.test(answer)) {
+      return answer;
+    }
+    console.log('Please provide a valid user address. Example: tony@5apps.com');
   }
 };
 
 // Start the show
 
-if (token && userAddress) {
-  lookupStorageInfo().then(executeBackup);
-} else {
-  console.log('No user address and/or auth token set via options. A browser window will open to connect your account.'.cyan);
-  prompt.message = '';
-  prompt.delimiter = '';
-  prompt.override = program;
-  prompt.start();
+const run = async function() {
+  if (token && userAddress) {
+    await lookupStorageInfo();
+    await executeBackup();
+    return;
+  }
 
-  prompt.get(schemas.userAddress, (err, result) => {
-    userAddress = result.userAddress;
+  console.log(pc.cyan('No user address and/or auth token set via options. A browser window will open to connect your account.'));
 
-    lookupStorageInfo().then(storageInfo => {
-      const authURL = addQueryParamsToURL(storageInfo.authURL, {
-        client_id: 'rs-backup.5apps.com',
-        redirect_uri: ORIGIN + '/',
-        response_type: 'token',
-        scope: authScope
-      });
+  const rl = createInterface({ input: stdin, output: stdout });
 
-      opener(authURL);
+  try {
+    userAddress = await promptUserAddress(rl);
 
-      prompt.get(schemas.token, (err, result) => {
-        token = result.token;
-        executeBackup();
-      });
+    const storageInfo = await lookupStorageInfo();
+    const authURL = addQueryParamsToURL(storageInfo.authURL, {
+      client_id: 'rs-backup.5apps.com',
+      redirect_uri: ORIGIN + '/',
+      response_type: 'token',
+      scope: authScope
     });
-  });
-}
+
+    await open(authURL);
+
+    token = (await rl.question('Authorization token: ')).trim();
+    await executeBackup();
+  } finally {
+    rl.close();
+  }
+};
+
+run().catch(handleError);

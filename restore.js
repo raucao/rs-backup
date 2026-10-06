@@ -1,20 +1,19 @@
 #!/usr/bin/env node
 
-'use strict';
+import fs, { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+import { program } from 'commander';
+import open from 'open';
+import pc from 'picocolors';
 
-const fs          = require('fs');
-const path        = require('path');
-const pkg         = require(path.join(__dirname, 'package.json'));
-const { program } = require('commander');
-const fetch       = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-const prompt      = require('prompt');
-const opener      = require("opener");
-const colors      = require("colors");
+import encodePath from './encode-path.js';
+import discovery from './discovery.js';
+import rateLimited from './rate-limited.js';
+import addQueryParamsToURL from './add-query-params-to-url.js';
 
-const encodePath  = require('./encode-path');
-const discovery   = require('./discovery.js');
-const rateLimited = require('./rate-limited');
-const addQueryParamsToURL = require('./add-query-params-to-url');
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url)));
 
 program
   .version(pkg.version)
@@ -35,12 +34,11 @@ const includePublic = options.includePublic || false;
 const authScope     = category.length > 0 ? category+':rw' : '*:rw';
 const rateLimit     = options.rateLimit || 40;
 
-let userAddress     = options.userAddress;
-let token           = options.token;
-let storageBaseUrl  = null;
+let userAddress    = options.userAddress;
+let token          = options.token;
+let storageBaseUrl = null;
 
-if (!(backupDir)) {
-  // TODO ask or use default
+if (!backupDir) {
   console.log('Please provide a backup directory path via the --backup-dir option');
   process.exit(1);
 }
@@ -56,47 +54,55 @@ if (category !== '') {
   publicDir = `public/${initialDir}`;
 }
 
-const handleError = function(msg) {
-  console.log(`Error: ${msg}`.red)
-}
+const handleError = function(error) {
+  console.log(pc.red(`Error: ${error.message ?? String(error)}`));
+};
 
-const putDocument = function(path, meta) {
-  const headers = {
+const authHeaders = function(meta) {
+  return {
     'Authorization': `Bearer ${token}`,
     'Content-Type': meta['Content-Type'],
     'If-None-Match': '"'+meta['ETag']+'"',
-    'User-Agent': `RSBackup/${program._version}`,
+    'User-Agent': `RSBackup/${pkg.version}`,
     'Origin': ORIGIN
   };
+};
 
+const putDocument = async function(path, meta) {
   let body;
   try {
-    body = fs.readFileSync(backupDir+'/'+path);
-  } catch(e) {
+    body = fs.readFileSync(join(backupDir, path));
+  } catch (e) {
     handleError(`could not restore ${path} (${e.message})`);
+    return;
   }
 
-  const options = { method: 'PUT', body: body, headers: headers };
+  try {
+    const res = await fetchRateLimited(storageBaseUrl+encodePath(path), {
+      method: 'PUT',
+      body: body,
+      headers: authHeaders(meta)
+    });
 
-  return fetch(storageBaseUrl+encodePath(path), options).then(res => {
     if (res.status === 200 || res.status === 201) {
       console.log(`Restored ${path} (${String(res.status)})`);
     } else {
-      res.text().then(text => console.log(text));
+      const text = await res.text();
+      console.log(text);
       handleError(`didn't restore ${path} (${String(res.status)})`);
     }
-  }, e => {
+  } catch (e) {
     handleError(`could not restore ${path} (${e.message})`);
-  });
+  }
 };
 
-const putDocumentRateLimited = rateLimited(putDocument, rateLimit);
+const fetchRateLimited = rateLimited(fetch, rateLimit);
 
-const putDirectoryContents = function(dir) {
+const putDirectoryContents = async function(dir) {
   let listing = null;
   try {
-    listing = JSON.parse(fs.readFileSync(backupDir+'/'+dir+'000_folder-description.json'));
-  } catch(e) {
+    listing = JSON.parse(fs.readFileSync(join(backupDir, dir, '000_folder-description.json')));
+  } catch (e) {
     if (e.code === 'ENOENT') {
       console.log(`No description file found for folder '${dir}'. Skipping.`);
     } else {
@@ -106,81 +112,78 @@ const putDirectoryContents = function(dir) {
   }
   if (!listing) return;
 
-  Object.keys(listing.items).forEach(key => {
+  await Promise.all(Object.keys(listing.items).map((key) => {
     if (isDirectory(key)) {
-      putDirectoryContents(dir+key);
+      return putDirectoryContents(dir+key);
     } else {
-      const meta = listing.items[key];
-      putDocumentRateLimited(dir+key, meta);
+      return putDocument(dir+key, listing.items[key]);
     }
-  });
+  }));
 };
 
-const lookupStorageInfo = function() {
-  return discovery.lookup(userAddress).then(storageInfo => {
+const lookupStorageInfo = async function() {
+  try {
+    const storageInfo = await discovery.lookup(userAddress);
     let href = storageInfo.href;
     if (href[href.length-1] !== '/') { href = href+'/'; }
     storageBaseUrl = href;
     return storageInfo;
-  }).catch(error => {
+  } catch (error) {
     console.log('Lookup of '+userAddress+' failed:');
     console.log(error);
     process.exit(1);
-  });
-};
-
-const executeRestore = function() {
-  console.log('\nStarting restore...\n');
-  putDirectoryContents(initialDir);
-  if (includePublic && publicDir) {
-    putDirectoryContents(publicDir);
   }
 };
 
-const schemas = {
-  userAddress: {
-    name: 'userAddress',
-    description: 'User address (user@host):',
-    type: 'string',
-    pattern: /^.+@.+$/,
-    message: 'Please provide a valid user address. Example: tony@5apps.com',
-    required: true,
-  },
-  token: {
-    name: 'token',
-    description: 'Authorization token:',
-    type: 'string',
-    required: true,
+const executeRestore = async function() {
+  console.log('\nStarting restore...\n');
+  await putDirectoryContents(initialDir);
+  if (includePublic && publicDir) {
+    await putDirectoryContents(publicDir);
+  }
+};
+
+const promptUserAddress = async function(rl) {
+  while (true) {
+    const answer = (await rl.question('User address (user@host): ')).trim();
+    if (/^.+@.+$/.test(answer)) {
+      return answer;
+    }
+    console.log('Please provide a valid user address. Example: tony@5apps.com');
   }
 };
 
 // Start the show
 
-if (token && userAddress) {
-  lookupStorageInfo().then(executeRestore);
-} else {
-  console.log('No user address and auth token set via options. Please type your user address and hit enter in order to open a browser window and connect your remote storage.'.cyan);
-  prompt.message = '';
-  prompt.delimiter = '';
-  prompt.start();
+const run = async function() {
+  if (token && userAddress) {
+    await lookupStorageInfo();
+    await executeRestore();
+    return;
+  }
 
-  prompt.get(schemas.userAddress, (err, result) => {
-    userAddress = result.userAddress;
+  console.log(pc.cyan('No user address and auth token set via options. Please type your user address and hit enter in order to open a browser window and connect your remote storage.'));
 
-    lookupStorageInfo().then(storageInfo => {
-      const authURL = addQueryParamsToURL(storageInfo.authURL, {
-        client_id: 'rs-backup.5apps.com',
-        redirect_uri: ORIGIN + '/',
-        response_type: 'token',
-        scope: authScope
-      });
+  const rl = createInterface({ input: stdin, output: stdout });
 
-      opener(authURL);
+  try {
+    userAddress = await promptUserAddress(rl);
 
-      prompt.get(schemas.token, (err, result) => {
-        token = result.token;
-        executeRestore();
-      });
+    const storageInfo = await lookupStorageInfo();
+    const authURL = addQueryParamsToURL(storageInfo.authURL, {
+      client_id: 'rs-backup.5apps.com',
+      redirect_uri: ORIGIN + '/',
+      response_type: 'token',
+      scope: authScope
     });
-  });
-}
+
+    await open(authURL);
+
+    token = (await rl.question('Authorization token: ')).trim();
+    await executeRestore();
+  } finally {
+    rl.close();
+  }
+};
+
+run().catch(handleError);
