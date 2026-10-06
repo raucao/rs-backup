@@ -11,9 +11,12 @@ const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function startMockServer() {
   const received = [];
+  const requests = [];
   const server = createServer((req, res) => {
     const { pathname } = new URL(req.url, 'http://localhost');
     const port = server.address().port;
+
+    requests.push({ method: req.method, pathname });
 
     if (req.method === 'PUT') {
       let body = '';
@@ -42,25 +45,29 @@ function startMockServer() {
       return;
     }
 
+    const decodedPath = decodeURIComponent(pathname);
+
     const listings = {
-      '/storage/': { items: { 'foo.txt': { ETag: 'a' }, 'sub/': { ETag: 'b' } } },
-      '/storage/sub/': { items: { 'bar.txt': { ETag: 'c' } } }
+      '/storage/': { items: { 'foo.txt': { ETag: 'a' }, 'sub/': { ETag: 'b' }, '#foo/': { ETag: 'd' } } },
+      '/storage/sub/': { items: { 'bar.txt': { ETag: 'c' } } },
+      '/storage/#foo/': { items: { 'inside.txt': { ETag: 'e' } } }
     };
 
-    if (listings[pathname]) {
+    if (listings[decodedPath]) {
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify(listings[pathname]));
+      res.end(JSON.stringify(listings[decodedPath]));
       return;
     }
 
     const documents = {
       '/storage/foo.txt': 'hello',
-      '/storage/sub/bar.txt': 'world'
+      '/storage/sub/bar.txt': 'world',
+      '/storage/#foo/inside.txt': 'hashed'
     };
 
-    if (documents[pathname]) {
+    if (documents[decodedPath]) {
       res.setHeader('content-type', 'text/plain');
-      res.end(documents[pathname]);
+      res.end(documents[decodedPath]);
       return;
     }
 
@@ -69,6 +76,7 @@ function startMockServer() {
   });
 
   server.received = received;
+  server.requests = requests;
 
   return new Promise((resolve) => {
     server.listen(0, () => resolve(server));
@@ -110,6 +118,14 @@ test('rs-backup downloads a remoteStorage tree end to end', async (t) => {
   assert.equal(await readFile(join(backupDir, 'sub', 'bar.txt'), 'utf8'), 'world');
   assert.ok(JSON.parse(await readFile(join(backupDir, '000_folder-description.json'), 'utf8')).items['foo.txt']);
   assert.ok(JSON.parse(await readFile(join(backupDir, 'sub', '000_folder-description.json'), 'utf8')).items['bar.txt']);
+
+  assert.equal(await readFile(join(backupDir, '#foo', 'inside.txt'), 'utf8'), 'hashed');
+  assert.ok(JSON.parse(await readFile(join(backupDir, '#foo', '000_folder-description.json'), 'utf8')).items['inside.txt']);
+
+  assert.ok(
+    server.requests.some((r) => r.pathname === '/storage/%23foo/'),
+    'expected the hash directory to be requested with an encoded path'
+  );
 });
 
 test('rs-restore uploads a local backup end to end', async (t) => {
@@ -123,13 +139,22 @@ test('rs-restore uploads a local backup end to end', async (t) => {
   });
 
   await mkdir(join(backupDir, 'sub'), { recursive: true });
+  await mkdir(join(backupDir, '#foo'), { recursive: true });
   await writeFile(join(backupDir, 'foo.txt'), 'hello');
   await writeFile(join(backupDir, 'sub', 'bar.txt'), 'world');
+  await writeFile(join(backupDir, '#foo', 'inside.txt'), 'hashed');
   await writeFile(join(backupDir, '000_folder-description.json'), JSON.stringify({
-    items: { 'foo.txt': { ETag: 'a', 'Content-Type': 'text/plain' }, 'sub/': { ETag: 'b' } }
+    items: {
+      'foo.txt': { ETag: 'a', 'Content-Type': 'text/plain' },
+      'sub/': { ETag: 'b' },
+      '#foo/': { ETag: 'd' }
+    }
   }));
   await writeFile(join(backupDir, 'sub', '000_folder-description.json'), JSON.stringify({
     items: { 'bar.txt': { ETag: 'c', 'Content-Type': 'text/plain' } }
+  }));
+  await writeFile(join(backupDir, '#foo', '000_folder-description.json'), JSON.stringify({
+    items: { 'inside.txt': { ETag: 'e', 'Content-Type': 'text/plain' } }
   }));
 
   const { code, output } = await runCli('restore.js', [
@@ -144,4 +169,5 @@ test('rs-restore uploads a local backup end to end', async (t) => {
   const uploaded = Object.fromEntries(server.received.map((r) => [r.pathname, r.body]));
   assert.equal(uploaded['/storage/foo.txt'], 'hello');
   assert.equal(uploaded['/storage/sub/bar.txt'], 'world');
+  assert.equal(uploaded['/storage/%23foo/inside.txt'], 'hashed');
 });
